@@ -124,10 +124,10 @@ class _PrismCardWidgetState extends State<PrismCardWidget>
         ui.FragmentProgram.fromAsset('shaders/sparkle_shader.frag')
             .catchError((_) => null),
       ]);
-      _chromeMetalShader = results[0]?.fragmentShader();
-      _diamondPrismShader = results[1]?.fragmentShader();
-      _prismShader = results[2]?.fragmentShader();
-      _sparkleShader = results[3]?.fragmentShader();
+      _chromeMetalShader = results[0].fragmentShader();
+      _diamondPrismShader = results[1].fragmentShader();
+      _prismShader = results[2].fragmentShader();
+      _sparkleShader = results[3].fragmentShader();
       print("Shader loading attempted.");
       _resolveImage(); // Attempt to resolve image after loading shaders
     } catch (e) {

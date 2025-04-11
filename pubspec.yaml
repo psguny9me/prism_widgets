@@ -14,7 +14,7 @@ description: "A Flutter widget library demonstrating various shader effects like
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0
+version: 0.1.0
 
 # Add homepage, repository, and issue_tracker URLs (replace with your actual URLs)
 homepage: https://github.com/your_username/prism_widgets # Example URL
