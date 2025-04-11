@@ -91,6 +91,9 @@ flutter:
   # Add shaders here
   shaders:
     - shaders/prism_shader.frag
+    - shaders/sparkle_shader.frag
+    - shaders/diamond_prism_shader.frag
+    - shaders/chrome_metal_shader.frag
 
   # Add assets directories here
   assets:

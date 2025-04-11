@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'prism_card_widget.dart'; // Import the custom widget
+import 'prism_card_widget.dart'; // Import the custom widget and enums
 
 void main() {
   runApp(const MyApp());
@@ -32,31 +32,41 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(),
+      home: const MyHomePage(
+        imagePath: 'assets/images/test.jpg', // Default image path
+        cardWidth: 300.0,
+        cardHeight: 420.0,
+      ),
     );
   }
 }
 
-class MyHomePage extends StatelessWidget {
-  const MyHomePage({super.key});
+// Make MyHomePage stateful to manage the selected shader mode
+class MyHomePage extends StatefulWidget {
+  final String imagePath;
+  final double cardWidth;
+  final double cardHeight;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+  const MyHomePage({
+    super.key,
+    required this.imagePath,
+    required this.cardWidth,
+    required this.cardHeight,
+  });
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  // State variables for selected material and coating
+  MaterialEffect _selectedMaterial =
+      MaterialEffect.chromeMetal; // Default material
+  CoatingEffect _selectedCoating = CoatingEffect.sparkle; // Default coating
+  double _imageOpacity = 0.85;
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
         // TRY THIS: Try changing the color here to a specific color (to
@@ -65,38 +75,125 @@ class MyHomePage extends StatelessWidget {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         // Here we take the value from the MyHomePage object that was created by
         // the App.build method, and use it to set our appbar title.
-        title: const Text('Prism Shader Card Effect'),
+        title: const Text('Material & Coating Effects'),
       ),
       body: Center(
         // Center is a layout widget. It takes a single child and positions it
         // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'Hover or drag over the card:',
-            ),
-            const SizedBox(height: 20),
-            PrismCardWidget(
-              // Replace with your actual image asset
-              imageProvider: const AssetImage('assets/images/test.jpg'),
-              width: 300,
-              height: 420,
-            ),
-          ],
+        child: SingleChildScrollView(
+          // Allow scrolling if content overflows
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            // Column is also a layout widget. It takes a list of children and
+            // arranges them vertically. By default, it sizes itself to fit its
+            // children horizontally, and tries to be as tall as its parent.
+            //
+            // Column has various properties to control how it sizes itself and
+            // how it positions its children. Here we use mainAxisAlignment to
+            // center the children vertically; the main axis here is the vertical
+            // axis because Columns are vertical (the cross axis would be
+            // horizontal).
+            //
+            // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
+            // action in the IDE, or press "p" in the console), to see the
+            // wireframe for each widget.
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              const Text(
+                'Hover or drag over the card:',
+              ),
+              const SizedBox(height: 20),
+              // Pass the selected effects to the widget
+              PrismCardWidget(
+                imageProvider: AssetImage(widget.imagePath),
+                width: widget.cardWidth,
+                height: widget.cardHeight,
+                materialEffect: _selectedMaterial,
+                coatingEffect: _selectedCoating,
+                imageOpacity: _imageOpacity,
+              ),
+              const SizedBox(height: 30),
+
+              // --- Material Selection ---
+              const Text('Select Material (Background):',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              RadioListTile<MaterialEffect>(
+                title: const Text('None'),
+                value: MaterialEffect.none,
+                groupValue: _selectedMaterial,
+                onChanged: (MaterialEffect? value) {
+                  setState(
+                      () => _selectedMaterial = value ?? MaterialEffect.none);
+                },
+              ),
+              RadioListTile<MaterialEffect>(
+                title: const Text('Chrome Metal'),
+                value: MaterialEffect.chromeMetal,
+                groupValue: _selectedMaterial,
+                onChanged: (MaterialEffect? value) {
+                  setState(
+                      () => _selectedMaterial = value ?? MaterialEffect.none);
+                },
+              ),
+              RadioListTile<MaterialEffect>(
+                title: const Text('Diamond Prism'),
+                value: MaterialEffect.diamondPrism,
+                groupValue: _selectedMaterial,
+                onChanged: (MaterialEffect? value) {
+                  setState(
+                      () => _selectedMaterial = value ?? MaterialEffect.none);
+                },
+              ),
+              const SizedBox(height: 20),
+
+              // --- Coating Selection ---
+              const Text('Select Coating (Overlay):',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              RadioListTile<CoatingEffect>(
+                title: const Text('None'),
+                value: CoatingEffect.none,
+                groupValue: _selectedCoating,
+                onChanged: (CoatingEffect? value) {
+                  setState(
+                      () => _selectedCoating = value ?? CoatingEffect.none);
+                },
+              ),
+              RadioListTile<CoatingEffect>(
+                title: const Text('Prism'),
+                value: CoatingEffect.prism,
+                groupValue: _selectedCoating,
+                onChanged: (CoatingEffect? value) {
+                  setState(
+                      () => _selectedCoating = value ?? CoatingEffect.none);
+                },
+              ),
+              RadioListTile<CoatingEffect>(
+                title: const Text('Sparkle'),
+                value: CoatingEffect.sparkle,
+                groupValue: _selectedCoating,
+                onChanged: (CoatingEffect? value) {
+                  setState(
+                      () => _selectedCoating = value ?? CoatingEffect.none);
+                },
+              ),
+              const SizedBox(height: 20),
+
+              // --- Image Opacity Control ---
+              const Text('Image Opacity:'),
+              Slider(
+                value: _imageOpacity,
+                min: 0.0,
+                max: 1.0,
+                divisions: 10,
+                label: _imageOpacity.toStringAsFixed(1),
+                onChanged: (double value) {
+                  setState(() {
+                    _imageOpacity = value;
+                  });
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
