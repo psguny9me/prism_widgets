@@ -1,8 +1,6 @@
 name: prism_widgets
-description: "A new Flutter project."
-# The following line prevents the package from being accidentally published to
-# pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+description: "A Flutter widget library demonstrating various shader effects like prism, sparkle, diamond patterns, and chrome metal, simulating trading card effects."
+# publish_to: 'none' # REMOVE this line to allow publishing
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -16,10 +14,16 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.0
+
+# Add homepage, repository, and issue_tracker URLs (replace with your actual URLs)
+homepage: https://github.com/your_username/prism_widgets # Example URL
+repository: https://github.com/your_username/prism_widgets.git # Example URL
+issue_tracker: https://github.com/your_username/prism_widgets/issues # Example URL
 
 environment:
-  sdk: ^3.6.0
+  sdk: '>=3.0.0 <4.0.0' # Loosen the constraint slightly for broader compatibility
+  flutter: ">=1.17.0" # Minimum Flutter version (adjust if needed)
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -30,6 +34,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  vector_math: ^2.1.4 # Add vector_math dependency
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -44,7 +49,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  flutter_lints: ^4.0.0 # Consider updating to latest if desired
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -90,11 +95,11 @@ flutter:
 
   # Add shaders here
   shaders:
+    - shaders/chrome_metal_shader.frag
+    - shaders/diamond_prism_shader.frag
     - shaders/prism_shader.frag
     - shaders/sparkle_shader.frag
-    - shaders/diamond_prism_shader.frag
-    - shaders/chrome_metal_shader.frag
 
   # Add assets directories here
-  assets:
-    - assets/images/
+  # assets: # REMOVED - Library users should provide their own images.
+    # - assets/images/
