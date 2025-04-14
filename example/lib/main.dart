@@ -52,7 +52,9 @@ class _MyHomePageState extends State<MyHomePage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              Center(
+              SizedBox(
+                width: 300,
+                height: 200,
                 child: PrismCardWidget(
                   imageProvider: AssetImage(_imagePath),
                   materialEffect: _selectedMaterial,

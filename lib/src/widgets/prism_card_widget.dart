@@ -38,12 +38,13 @@ class _PrismCardWidgetState extends State<PrismCardWidget>
   ui.FragmentShader? _sparkleShader;
 
   ui.Image? _image;
-  double? _imageWidth;
-  double? _imageHeight;
+  double? _renderWidth; // Last known render width from LayoutBuilder
+  double? _renderHeight; // Last known render height from LayoutBuilder
   Vector3 _lightDirection = Vector3(0.0, 0.0, 1.0);
   ImageStream? _imageStream;
-  ImageInfo? _imageInfo;
-  bool _resourcesReady = false;
+  // ImageInfo removed from state, only ui.Image is needed
+  bool _shaderLoadAttemptFinished = false; // Tracks if _loadResources finished
+  bool _imageLoadAttemptFinished = false; // Tracks if _resolveImage was called
 
   @override
   void initState() {
@@ -52,11 +53,14 @@ class _PrismCardWidgetState extends State<PrismCardWidget>
       vsync: this,
       duration: const Duration(seconds: 20),
     )..repeat();
+    // Load shaders initially, regardless of selection (can be optimized later)
+    _loadResources();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Resolve image when dependencies change (e.g., first time or theme changes)
     _resolveImage();
   }
 
@@ -67,52 +71,68 @@ class _PrismCardWidgetState extends State<PrismCardWidget>
         widget.coatingEffect != oldWidget.coatingEffect;
 
     if (widget.imageProvider != oldWidget.imageProvider) {
-      _image = null;
-      _imageWidth = null;
-      _imageHeight = null;
-      _resourcesReady = false;
+      // Reset image state and trigger resolve
+      setState(() {
+        _image = null;
+        _imageLoadAttemptFinished = false;
+      });
       _resolveImage();
-    } else if (effectsChanged) {
-      bool needsReload = _checkIfReloadNeeded();
-      if (needsReload) {
+    }
+
+    // Reload shaders if effects changed and needed shaders are missing
+    // or if image provider changed (to ensure shaders are loaded with the new context)
+    if (effectsChanged || widget.imageProvider != oldWidget.imageProvider) {
+      if (_checkIfReloadNeeded()) {
         _loadResources();
-      } else {
-        setState(() {});
       }
     } else if (widget.imageOpacity != oldWidget.imageOpacity) {
+      // Trigger rebuild if only opacity changes
       setState(() {});
     }
   }
 
+  // Checks if *currently selected* effects require shaders that are not yet loaded
   bool _checkIfReloadNeeded() {
     if (widget.materialEffect == MaterialEffect.chromeMetal &&
-        _chromeMetalShader == null) {
-      return true;
-    }
+        _chromeMetalShader == null) return true;
     if (widget.materialEffect == MaterialEffect.diamondPrism &&
-        _diamondPrismShader == null) {
+        _diamondPrismShader == null) return true;
+    if (widget.coatingEffect == CoatingEffect.prism && _prismShader == null)
       return true;
-    }
-    if (widget.coatingEffect == CoatingEffect.prism && _prismShader == null) {
+    if (widget.coatingEffect == CoatingEffect.sparkle && _sparkleShader == null)
       return true;
-    }
-    if (widget.coatingEffect == CoatingEffect.sparkle &&
-        _sparkleShader == null) {
-      return true;
-    }
     return false;
   }
 
   Future<void> _loadResources() async {
+    // Mark that loading is starting (or restarting)
     setState(() {
-      _resourcesReady = false;
-      _chromeMetalShader = null;
-      _diamondPrismShader = null;
-      _prismShader = null;
-      _sparkleShader = null;
+      _shaderLoadAttemptFinished = false;
     });
 
+    // Dispose shaders that are no longer selected
+    if (widget.materialEffect != MaterialEffect.chromeMetal) {
+      _chromeMetalShader?.dispose();
+      _chromeMetalShader = null;
+    }
+    if (widget.materialEffect != MaterialEffect.diamondPrism) {
+      _diamondPrismShader?.dispose();
+      _diamondPrismShader = null;
+    }
+    if (widget.coatingEffect != CoatingEffect.prism) {
+      _prismShader?.dispose();
+      _prismShader = null;
+    }
+    if (widget.coatingEffect != CoatingEffect.sparkle) {
+      _sparkleShader?.dispose();
+      _sparkleShader = null;
+    }
+
+    // Build list of futures for shaders that are needed AND not loaded yet
     final List<Future<ui.FragmentProgram?>> shaderFutures = [];
+    final Map<String, int> typeToIndex =
+        {}; // Map shader type to its index in shaderFutures
+    int currentIndex = 0;
 
     Future<ui.FragmentProgram?> safeLoadShader(String shaderFileName) {
       final String assetPath = 'packages/prism_widgets/shaders/$shaderFileName';
@@ -124,115 +144,95 @@ class _PrismCardWidgetState extends State<PrismCardWidget>
       });
     }
 
-    bool shouldLoadChrome =
-        widget.materialEffect == MaterialEffect.chromeMetal ||
-            MaterialEffect.chromeMetal != MaterialEffect.none;
-    bool shouldLoadDiamond =
-        widget.materialEffect == MaterialEffect.diamondPrism ||
-            MaterialEffect.diamondPrism != MaterialEffect.none;
-    bool shouldLoadPrism = widget.coatingEffect == CoatingEffect.prism ||
-        CoatingEffect.prism != CoatingEffect.none;
-    bool shouldLoadSparkle = widget.coatingEffect == CoatingEffect.sparkle ||
-        CoatingEffect.sparkle != CoatingEffect.none;
+    if (widget.materialEffect == MaterialEffect.chromeMetal &&
+        _chromeMetalShader == null) {
+      shaderFutures.add(safeLoadShader('chrome_metal_shader.frag'));
+      typeToIndex['chrome'] = currentIndex++;
+    }
+    if (widget.materialEffect == MaterialEffect.diamondPrism &&
+        _diamondPrismShader == null) {
+      shaderFutures.add(safeLoadShader('diamond_prism_shader.frag'));
+      typeToIndex['diamond'] = currentIndex++;
+    }
+    if (widget.coatingEffect == CoatingEffect.prism && _prismShader == null) {
+      shaderFutures.add(safeLoadShader('prism_shader.frag'));
+      typeToIndex['prism'] = currentIndex++;
+    }
+    if (widget.coatingEffect == CoatingEffect.sparkle &&
+        _sparkleShader == null) {
+      shaderFutures.add(safeLoadShader('sparkle_shader.frag'));
+      typeToIndex['sparkle'] = currentIndex++;
+    }
 
-    shaderFutures.add(shouldLoadChrome
-        ? safeLoadShader('chrome_metal_shader.frag')
-        : Future.value(null));
-    shaderFutures.add(shouldLoadDiamond
-        ? safeLoadShader('diamond_prism_shader.frag')
-        : Future.value(null));
-    shaderFutures.add(shouldLoadPrism
-        ? safeLoadShader('prism_shader.frag')
-        : Future.value(null));
-    shaderFutures.add(shouldLoadSparkle
-        ? safeLoadShader('sparkle_shader.frag')
-        : Future.value(null));
+    // If no new shaders need loading, just mark finished
+    if (shaderFutures.isEmpty) {
+      if (mounted)
+        setState(() {
+          _shaderLoadAttemptFinished = true;
+        });
+      return;
+    }
 
     try {
       final List<ui.FragmentProgram?> results =
           await Future.wait(shaderFutures);
 
-      _chromeMetalShader = results[0]?.fragmentShader();
-      _diamondPrismShader = results[1]?.fragmentShader();
-      _prismShader = results[2]?.fragmentShader();
-      _sparkleShader = results[3]?.fragmentShader();
-
-      _resolveImage();
+      // Assign results using the tracked indices
+      if (typeToIndex.containsKey('chrome'))
+        _chromeMetalShader = results[typeToIndex['chrome']!]?.fragmentShader();
+      if (typeToIndex.containsKey('diamond'))
+        _diamondPrismShader =
+            results[typeToIndex['diamond']!]?.fragmentShader();
+      if (typeToIndex.containsKey('prism'))
+        _prismShader = results[typeToIndex['prism']!]?.fragmentShader();
+      if (typeToIndex.containsKey('sparkle'))
+        _sparkleShader = results[typeToIndex['sparkle']!]?.fragmentShader();
     } catch (e) {
       print('Error during Future.wait or shader assignment: $e');
+      // Error occurred, but still mark the attempt as finished
+    } finally {
+      // Ensure the finished flag is set and trigger rebuild
       if (mounted) {
-        _checkAndSetReady(forceCheck: true);
+        setState(() {
+          _shaderLoadAttemptFinished = true;
+        });
       }
     }
   }
 
   void _resolveImage() {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted || _imageLoadAttemptFinished) return;
+
+    setState(() {
+      _imageLoadAttemptFinished = true;
+    });
+
     final ImageStream newStream =
         widget.imageProvider.resolve(createLocalImageConfiguration(context));
-    if (newStream.key != _imageStream?.key) {
-      _imageStream?.removeListener(ImageStreamListener(_handleImageFrame));
-      _imageStream = newStream;
-      _imageStream!.addListener(ImageStreamListener(_handleImageFrame));
-    } else {
-      _checkAndSetReady();
-    }
+
+    _imageStream?.removeListener(ImageStreamListener(_handleImageFrame));
+    _imageStream = newStream;
+    _imageStream!.addListener(ImageStreamListener(_handleImageFrame));
   }
 
   void _handleImageFrame(ImageInfo imageInfo, bool synchronousCall) {
-    _imageInfo?.dispose();
-    _imageInfo = imageInfo;
-    _image = imageInfo.image;
-    _imageWidth = _image!.width.toDouble();
-    _imageHeight = _image!.height.toDouble();
-    _checkAndSetReady();
-  }
-
-  void _checkAndSetReady({bool forceCheck = false}) {
-    if (_resourcesReady && !forceCheck) {
-      return;
-    }
-
-    bool shadersOk = true;
-    if (widget.materialEffect == MaterialEffect.chromeMetal &&
-        _chromeMetalShader == null) {
-      shadersOk = false;
-    }
-    if (widget.materialEffect == MaterialEffect.diamondPrism &&
-        _diamondPrismShader == null) {
-      shadersOk = false;
-    }
-    if (widget.coatingEffect == CoatingEffect.prism && _prismShader == null) {
-      shadersOk = false;
-    }
-    if (widget.coatingEffect == CoatingEffect.sparkle &&
-        _sparkleShader == null) {
-      shadersOk = false;
-    }
-
-    if (_image != null && shadersOk && mounted) {
-      if (!_resourcesReady) {
-        setState(() {
-          _resourcesReady = true;
-        });
-      }
-    } else if (forceCheck && mounted) {
-      setState(() {
-        _resourcesReady = false;
-      });
-    }
+    if (!mounted) return;
+    // Just update the image object
+    setState(() {
+      _image = imageInfo.image;
+    });
+    // ImageInfo object is managed by the stream/framework
   }
 
   void _updateLightDirection(Offset localPosition) {
-    if (_imageWidth == null ||
-        _imageHeight == null ||
-        _imageWidth! <= 0 ||
-        _imageHeight! <= 0) return;
+    // Use last known render dimensions
+    if (_renderWidth == null ||
+        _renderHeight == null ||
+        _renderWidth! <= 0 ||
+        _renderHeight! <= 0) return;
 
-    final double ndcX = (localPosition.dx / _imageWidth!) * 2.0 - 1.0;
-    final double ndcY = (localPosition.dy / _imageHeight!) * 2.0 - 1.0;
+    final double ndcX = (localPosition.dx / _renderWidth!) * 2.0 - 1.0;
+    final double ndcY = (localPosition.dy / _renderHeight!) * 2.0 - 1.0;
     final newDirection =
         Vector3(ndcX.clamp(-1.0, 1.0), -ndcY.clamp(-1.0, 1.0), 0.8)
             .normalized();
@@ -247,7 +247,6 @@ class _PrismCardWidgetState extends State<PrismCardWidget>
   void dispose() {
     _timeController.dispose();
     _imageStream?.removeListener(ImageStreamListener(_handleImageFrame));
-    _imageInfo?.dispose();
     _prismShader?.dispose();
     _sparkleShader?.dispose();
     _diamondPrismShader?.dispose();
@@ -257,12 +256,13 @@ class _PrismCardWidgetState extends State<PrismCardWidget>
 
   @override
   Widget build(BuildContext context) {
-    final bool imageReady =
-        _image != null && _imageWidth != null && _imageHeight != null;
-    final bool shadersAttempted = _resourcesReady;
+    // Readiness check: image object must be loaded AND shader loading attempt must be finished
+    final bool imageReady = _image != null;
+    final bool shaderLoadAttempted = _shaderLoadAttemptFinished;
 
+    // Check for errors *after* loading is attempted
     bool shadersError = false;
-    if (imageReady && shadersAttempted) {
+    if (imageReady && shaderLoadAttempted) {
       bool chromeNeeded = widget.materialEffect == MaterialEffect.chromeMetal;
       bool diamondNeeded = widget.materialEffect == MaterialEffect.diamondPrism;
       bool prismNeeded = widget.coatingEffect == CoatingEffect.prism;
@@ -274,128 +274,161 @@ class _PrismCardWidgetState extends State<PrismCardWidget>
           (sparkleNeeded && _sparkleShader == null);
     }
 
-    if (!imageReady || !shadersAttempted || shadersError) {
-      String message = 'Loading Image...';
+    // --- Loading / Error State --- (Displayed before LayoutBuilder calculates size)
+    if (!imageReady || !shaderLoadAttempted || shadersError) {
+      String message = !_imageLoadAttemptFinished
+          ? 'Resolving Image...'
+          : (!imageReady ? 'Loading Image...' : 'Loading Shaders...');
       Widget indicator = const CircularProgressIndicator();
 
-      if (imageReady && !shadersAttempted) {
-        message = 'Loading Shaders...';
-      } else if (shadersError) {
+      if (shadersError) {
         message = 'Error loading required shaders';
-        indicator = Icon(Icons.error_outline, color: Colors.red, size: 48);
-      } else if (!imageReady && shadersAttempted) {
-        message = 'Error loading image';
         indicator = Icon(Icons.error_outline, color: Colors.red, size: 48);
       }
 
       return Center(
-          child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          indicator,
-          SizedBox(height: 16),
-          Text(message,
-              style: TextStyle(color: shadersError ? Colors.red : null)),
-        ],
-      ));
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        indicator,
+        SizedBox(height: 16),
+        Text(message, style: TextStyle(color: shadersError ? Colors.red : null))
+      ]));
     }
 
-    final double currentWidth = _imageWidth!;
-    final double currentHeight = _imageHeight!;
-    final Size cardSize = Size(currentWidth, currentHeight);
+    // --- Main Build Logic (Image and Shaders Ready) ---
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Determine render size
+        final double renderWidth = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : (_image?.width.toDouble() ?? 300);
+        final double renderHeight = constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : (_image?.height.toDouble() ?? 420);
+        final Size cardSize = Size(renderWidth, renderHeight);
 
-    return MouseRegion(
-      onHover: (event) => _updateLightDirection(event.localPosition),
-      onExit: (_) => setState(() {
-        _lightDirection = Vector3(0.0, 0.0, 1.0);
-      }),
-      child: GestureDetector(
-        onPanUpdate: (details) => _updateLightDirection(details.localPosition),
-        onPanEnd: (_) => setState(() {
-          _lightDirection = Vector3(0.0, 0.0, 1.0);
-        }),
-        child: SizedBox(
-          width: currentWidth,
-          height: currentHeight,
-          child: AnimatedBuilder(
-            animation: _timeController,
-            builder: (context, _) {
-              final double currentTime = _timeController.value * 20;
-
-              Widget materialLayer = const SizedBox.shrink();
-              if (widget.materialEffect == MaterialEffect.chromeMetal &&
-                  _chromeMetalShader != null) {
-                materialLayer = CustomPaint(
-                  size: cardSize,
-                  painter: ChromeMetalPainter(
-                    shader: _chromeMetalShader!,
-                    time: currentTime,
-                    lightDirection: _lightDirection,
-                    width: currentWidth,
-                    height: currentHeight,
-                  ),
-                );
-              } else if (widget.materialEffect == MaterialEffect.diamondPrism &&
-                  _diamondPrismShader != null) {
-                materialLayer = CustomPaint(
-                  size: cardSize,
-                  painter: DiamondPrismPainter(
-                    shader: _diamondPrismShader!,
-                    time: currentTime,
-                    lightDirection: _lightDirection,
-                    width: currentWidth,
-                    height: currentHeight,
-                  ),
-                );
+        // Update state with render size after the frame
+        // Use postFrameCallback to avoid calling setState during build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted &&
+              (_renderWidth != renderWidth || _renderHeight != renderHeight)) {
+            // Use a microtask to delay setState slightly after build completion
+            Future.microtask(() {
+              if (mounted) {
+                // Check mounted again inside microtask
+                setState(() {
+                  _renderWidth = renderWidth;
+                  _renderHeight = renderHeight;
+                });
               }
+            });
+          }
+        });
 
-              final imageLayer = Opacity(
-                opacity: widget.imageOpacity.clamp(0.0, 1.0),
-                child: RawImage(
-                    image: _image!,
-                    fit: BoxFit.cover,
-                    width: currentWidth,
-                    height: currentHeight),
-              );
+        // Rest of the build logic using renderWidth, renderHeight...
+        return MouseRegion(
+          onHover: (event) => _updateLightDirection(event.localPosition),
+          onExit: (_) => setState(() {
+            _lightDirection = Vector3(0.0, 0.0, 1.0);
+          }),
+          child: GestureDetector(
+            onPanUpdate: (details) =>
+                _updateLightDirection(details.localPosition),
+            onPanEnd: (_) => setState(() {
+              _lightDirection = Vector3(0.0, 0.0, 1.0);
+            }),
+            child: SizedBox(
+              // Use determined render size
+              width: renderWidth,
+              height: renderHeight,
+              child: AnimatedBuilder(
+                animation: _timeController,
+                builder: (context, _) {
+                  final double currentTime = _timeController.value * 20;
 
-              Widget coatingLayer = const SizedBox.shrink();
-              if (widget.coatingEffect == CoatingEffect.prism &&
-                  _prismShader != null) {
-                coatingLayer = CustomPaint(
-                  size: cardSize,
-                  painter: PrismPainter(
-                    shader: _prismShader!,
-                    time: currentTime,
-                    lightDirection: _lightDirection,
-                    width: currentWidth,
-                    height: currentHeight,
-                  ),
-                );
-              } else if (widget.coatingEffect == CoatingEffect.sparkle &&
-                  _sparkleShader != null) {
-                coatingLayer = CustomPaint(
-                  size: cardSize,
-                  painter: SparklePainter(
-                    shader: _sparkleShader!,
-                    time: currentTime,
-                    lightDirection: _lightDirection,
-                    width: currentWidth,
-                    height: currentHeight,
-                  ),
-                );
-              }
+                  // Layer 1: Material Effect (only if needed and loaded)
+                  Widget materialLayer = const SizedBox.shrink();
+                  if (widget.materialEffect == MaterialEffect.chromeMetal &&
+                      _chromeMetalShader != null) {
+                    materialLayer = CustomPaint(
+                      size: cardSize,
+                      painter: ChromeMetalPainter(
+                        shader: _chromeMetalShader!,
+                        time: currentTime,
+                        lightDirection: _lightDirection,
+                        width: renderWidth,
+                        height: renderHeight,
+                      ),
+                    );
+                  } else if (widget.materialEffect ==
+                          MaterialEffect.diamondPrism &&
+                      _diamondPrismShader != null) {
+                    materialLayer = CustomPaint(
+                      size: cardSize,
+                      painter: DiamondPrismPainter(
+                        shader: _diamondPrismShader!,
+                        time: currentTime,
+                        lightDirection: _lightDirection,
+                        width: renderWidth,
+                        height: renderHeight,
+                      ),
+                    );
+                  }
 
-              return Stack(
-                children: [
-                  materialLayer,
-                  imageLayer,
-                  coatingLayer,
-                ],
-              );
-            },
+                  // Layer 2: Base Image (Image is guaranteed non-null here)
+                  final imageLayer = Opacity(
+                    opacity: widget.imageOpacity.clamp(0.0, 1.0),
+                    child: RawImage(
+                        image: _image!,
+                        fit: BoxFit.cover,
+                        width: renderWidth,
+                        height: renderHeight),
+                  );
+
+                  // Layer 3: Coating Effect (only if needed and loaded)
+                  Widget coatingLayer = const SizedBox.shrink();
+                  if (widget.coatingEffect == CoatingEffect.prism &&
+                      _prismShader != null) {
+                    coatingLayer = CustomPaint(
+                      size: cardSize,
+                      painter: PrismPainter(
+                        shader: _prismShader!,
+                        time: currentTime,
+                        lightDirection: _lightDirection,
+                        width: renderWidth,
+                        height: renderHeight,
+                      ),
+                    );
+                  } else if (widget.coatingEffect == CoatingEffect.sparkle &&
+                      _sparkleShader != null) {
+                    coatingLayer = CustomPaint(
+                      size: cardSize,
+                      painter: SparklePainter(
+                        shader: _sparkleShader!,
+                        time: currentTime,
+                        lightDirection: _lightDirection,
+                        width: renderWidth,
+                        height: renderHeight,
+                      ),
+                    );
+                  }
+
+                  // Add ClipRect to prevent effects bleeding outside bounds
+                  return ClipRect(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        materialLayer,
+                        imageLayer,
+                        coatingLayer,
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

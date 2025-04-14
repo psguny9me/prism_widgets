@@ -4,83 +4,92 @@
 // Uniforms
 uniform vec2 uResolution;
 uniform float uTime;
+uniform vec3 uLightDirection; // Assuming light direction is provided
 
 // Output color
 out vec4 fragColor;
 
-// Pseudo-random number generator
+// --- Noise Functions ---
+// Simple pseudo-random number generator
 float random(vec2 st) {
     return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
 }
 
-// Noise function (can use simplex noise for better results if available)
-float noise(vec2 st) {
+// Value Noise (simple version)
+float valueNoise(vec2 st) {
     vec2 i = floor(st);
     vec2 f = fract(st);
-    vec2 u = f * f * (3.0 - 2.0 * f); // Smoothstep curve
+    vec2 u = f * f * (3.0 - 2.0 * f); // Smoothstep
 
     return mix(mix(random(i + vec2(0.0, 0.0)), random(i + vec2(1.0, 0.0)), u.x),
                mix(random(i + vec2(0.0, 1.0)), random(i + vec2(1.0, 1.0)), u.x), u.y);
 }
 
-// Smooth pulsing function (0 -> 1 -> 0)
-float pulse(float time, float frequency, float offset) {
-    float val = sin((time + offset) * 3.14159 * frequency) * 0.5 + 0.5;
-    return val * val; // Square to make the peak sharper and fade faster
+// Fractal Brownian Motion (FBM) - combines multiple noise layers
+float fbm(vec2 st) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    float frequency = 0.0;
+    int octaves = 4; // Number of noise layers
+
+    for (int i = 0; i < octaves; i++) {
+        value += amplitude * valueNoise(st);
+        st *= 2.0; // Increase frequency
+        amplitude *= 0.5; // Decrease amplitude
+    }
+    return value;
 }
 
+// --- Surface Normal Simulation (Simplified) ---
+vec3 calculatePerturbedNormal(vec2 uv) {
+    float noiseScale = 20.0; // Increase scale slightly for finer wrinkles
+    float noiseStrength = 0.5; // Adjust strength of perturbation
+
+    // Calculate a single noise value, animated slightly
+    float noise = fbm(uv * noiseScale + uTime * 0.1);
+
+    // Perturb the normal based on the noise value
+    // This creates bumps/dents rather than using derivatives
+    // We use noise directly and also offset slightly to get variation
+    float noiseOffset = fbm(uv * noiseScale + vec2(10.0, 10.0) + uTime * 0.1);
+    vec3 perturbedNormal = normalize(vec3(
+        (noise - 0.5) * noiseStrength,          // Perturb x based on noise
+        (noiseOffset - 0.5) * noiseStrength,    // Perturb y based on offset noise
+        1.0                                     // Z remains primarily facing outwards
+    ));
+
+    return perturbedNormal;
+}
+
+// --- Main ---
 void main() {
     vec2 uv = FlutterFragCoord().xy / uResolution;
-    vec2 originalUV = uv;
+    vec3 lightDir = normalize(uLightDirection);
+    vec3 viewDir = vec3(0.0, 0.0, 1.0);
 
-    // --- Sparkle Grid & Jitter ---
-    // Define a grid cell size (smaller value = more potential sparkles)
-    float gridCellSize = 0.03; // Adjust for density
-    vec2 gridUV = uv / gridCellSize;
-    vec2 gridID = floor(gridUV);
-    vec2 gridFract = fract(gridUV);
+    // Use the perturbed normal calculation again
+    vec3 normal = calculatePerturbedNormal(uv); // <-- Re-enabled
 
-    // Generate a unique random offset for each grid cell
-    float cellRand = random(gridID);
+    // --- Lighting Calculation ---
+    vec3 reflectDir = reflect(-lightDir, normal);
+    float specularPower = 48.0; // Increase shininess for sharper highlights
+    float specularIntensity = pow(max(dot(viewDir, reflectDir), 0.0), specularPower);
+    float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.0);
+    fresnel = mix(0.1, 1.0, fresnel);
+    // Adjust intensity mix for more prominent specular
+    float finalIntensity = specularIntensity * 1.8 + fresnel * 0.2; // More specular weight
+    finalIntensity = smoothstep(0.1, 0.7, finalIntensity); // Adjust smoothing range
 
-    // Only create a sparkle in some grid cells
-    // Adjust threshold (e.g., 0.85) to control density
-    if (cellRand < 0.85) {
-        fragColor = vec4(0.0); // No sparkle in this cell
-        return;
-    }
+    // --- Color (Optional Iridescence) ---
+    float hue = atan(reflectDir.y, reflectDir.x) / (2.0 * 3.14159) + 0.5;
+    vec3 iridescentColor = vec3(
+        sin(hue * 6.283 + 0.0) * 0.5 + 0.5,
+        sin(hue * 6.283 + 2.0) * 0.5 + 0.5,
+        sin(hue * 6.283 + 4.0) * 0.5 + 0.5
+    );
+    vec3 finalColor = mix(vec3(1.0), iridescentColor, 0.35); // Slightly more iridescence
 
-    // Add jitter to the sparkle position within the cell
-    vec2 jitterOffset = vec2(random(gridID + 0.1) - 0.5, random(gridID + 0.2) - 0.5) * 0.8;
-    vec2 sparkleCenterUV = (gridID + 0.5 + jitterOffset) * gridCellSize;
-
-    // --- Sparkle Appearance ---
-    float dist = distance(uv, sparkleCenterUV);
-
-    // Base sparkle size (smaller radius = smaller sparkles)
-    float sparkleRadius = gridCellSize * (0.1 + random(gridID + 0.3) * 0.2); // Vary size
-
-    // Calculate intensity based on distance (falloff)
-    float intensity = smoothstep(sparkleRadius, sparkleRadius * 0.3, dist);
-
-    // --- Twinkling Animation ---
-    // Give each sparkle a unique time offset and frequency for twinkling
-    float timeOffset = random(gridID + 0.4) * 10.0;
-    float twinkleFrequency = 0.5 + random(gridID + 0.5) * 1.5; // Vary speed
-
-    // Apply pulsing brightness
-    float brightness = pulse(uTime, twinkleFrequency, timeOffset);
-    brightness = smoothstep(0.1, 0.6, brightness); // Make the pulse more distinct
-
-    intensity *= brightness;
-
-    // --- Final Color ---
-    // Base color (mostly white with slight yellow tint)
-    vec3 sparkleColor = vec3(1.0, 1.0, 0.85);
-
-    // Optional: Add subtle color shift based on position or time
-    // sparkleColor.g *= (0.8 + 0.2 * sin(uTime + gridID.x * 0.5));
-
-    // Calculate final color with alpha
-    fragColor = vec4(sparkleColor * intensity, intensity);
+    // --- Final Output ---
+    float finalAlpha = finalIntensity * 0.75; // Slightly increase overall alpha
+    fragColor = vec4(finalColor * finalAlpha, finalAlpha);
 } 

@@ -20,8 +20,8 @@ class SparklePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    shader.setFloat(0, width); // uSize.x
-    shader.setFloat(1, height); // uSize.y
+    shader.setFloat(0, width); // uResolution.x
+    shader.setFloat(1, height); // uResolution.y
     shader.setFloat(2, time); // uTime
     shader.setFloat(3, lightDirection.x); // uLightDirection.x
     shader.setFloat(4, lightDirection.y); // uLightDirection.y

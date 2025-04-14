@@ -97,13 +97,19 @@ class _PrismCardWidgetState extends State<PrismCardWidget>
   // Helper to check if shader reload is needed based on current selection
   bool _checkIfReloadNeeded() {
     if (widget.materialEffect == MaterialEffect.chromeMetal &&
-        _chromeMetalShader == null) return true;
+        _chromeMetalShader == null) {
+      return true;
+    }
     if (widget.materialEffect == MaterialEffect.diamondPrism &&
-        _diamondPrismShader == null) return true;
-    if (widget.coatingEffect == CoatingEffect.prism && _prismShader == null)
+        _diamondPrismShader == null) {
       return true;
-    if (widget.coatingEffect == CoatingEffect.sparkle && _sparkleShader == null)
+    }
+    if (widget.coatingEffect == CoatingEffect.prism && _prismShader == null) {
       return true;
+    }
+    if (widget.coatingEffect == CoatingEffect.sparkle && _sparkleShader == null) {
+      return true;
+    }
     return false;
   }
 
@@ -166,13 +172,19 @@ class _PrismCardWidgetState extends State<PrismCardWidget>
   void _checkAndSetReady() {
     bool shadersOk = true;
     if (widget.materialEffect == MaterialEffect.chromeMetal &&
-        _chromeMetalShader == null) shadersOk = false;
+        _chromeMetalShader == null) {
+      shadersOk = false;
+    }
     if (widget.materialEffect == MaterialEffect.diamondPrism &&
-        _diamondPrismShader == null) shadersOk = false;
-    if (widget.coatingEffect == CoatingEffect.prism && _prismShader == null)
+        _diamondPrismShader == null) {
       shadersOk = false;
-    if (widget.coatingEffect == CoatingEffect.sparkle && _sparkleShader == null)
+    }
+    if (widget.coatingEffect == CoatingEffect.prism && _prismShader == null) {
       shadersOk = false;
+    }
+    if (widget.coatingEffect == CoatingEffect.sparkle && _sparkleShader == null) {
+      shadersOk = false;
+    }
 
     // We consider ready if the image is loaded AND any selected shader is loaded
     if (_image != null && shadersOk && mounted && !_resourcesReady) {

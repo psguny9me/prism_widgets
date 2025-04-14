@@ -52,9 +52,9 @@ void main() {
     vec3 prismColor = rainbow(prismValue);
 
     // Calculate prism intensity based on reflection angle
-    float prismIntensity = pow(max(dot(viewDir, reflectDir), 0.0), 16.0);
-    prismIntensity = mix(0.0, 0.8, prismIntensity); // Start from 0 intensity
-    prismIntensity *= (smoothstep(0.0, 0.5, length(uv * 2.0 - 1.0))); // Fade near edges
+    float prismIntensity = pow(max(dot(viewDir, reflectDir), 0.0), 4.0);
+    prismIntensity = mix(0.0, 1.0, prismIntensity);
+    prismIntensity *= (smoothstep(0.0, 0.5, length(uv * 2.0 - 1.0)));
 
     // --- Specular Highlight (Optional, can add subtle glint) ---
     vec3 halfwayDir = normalize(lightDir + viewDir);
